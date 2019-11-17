@@ -6,7 +6,7 @@ import numpy as np
 from tensorpack.models import Conv2D, layer_register
 from tensorpack.tfutils.argscope import argscope
 from tensorpack.tfutils.scope_utils import auto_reuse_variable_scope, under_name_scope
-from tensorpack.tfutils.summary import add_moving_summary
+from tensorpack.tfutils.summary import add_moving_summary, add_tensor_summary
 from tensorpack.utils.argtools import memoized
 
 from config import config as cfg
@@ -98,7 +98,12 @@ def rpn_losses(anchor_labels, anchor_boxes, label_logits, box_logits):
     box_loss = box_loss * (1. / cfg.RPN.BATCH_PER_IM)
     box_loss = tf.where(tf.equal(nr_pos, 0), placeholder, box_loss, name='box_loss')
 
-    add_moving_summary(label_loss, box_loss, nr_valid, nr_pos)
+    add_tensor_summary(label_loss, ['scalar'], name='label_loss')
+    add_tensor_summary(box_loss, ['scalar'], name='box_loss')
+    add_tensor_summary(nr_valid, ['scalar'], name='nr_valid')
+    add_tensor_summary(nr_pos, ['scalar'], name='nr_pos')
+
+    # add_moving_summary(label_loss, box_loss, nr_valid, nr_pos)
     return [label_loss, box_loss]
 
 
