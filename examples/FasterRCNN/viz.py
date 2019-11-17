@@ -1,18 +1,113 @@
 # -*- coding: utf-8 -*-
 # File: viz.py
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
+from six.moves import zip
 
 from tensorpack.utils import viz
 from tensorpack.utils.palette import PALETTE_RGB
 
 from config import config as cfg
-from utils.np_box_ops import area as np_area
 from utils.np_box_ops import iou as np_iou
-from common import polygons_to_mask
+from six.moves import range
+import PIL.Image as Image
+import PIL.ImageColor as ImageColor
+import PIL.ImageDraw as ImageDraw
+import PIL.ImageFont as ImageFont
 
+STANDARD_COLORS = [
+    'AliceBlue', 'Chartreuse', 'Aqua', 'Aquamarine', 'Azure', 'Beige', 'Bisque',
+    'BlanchedAlmond', 'BlueViolet', 'BurlyWood', 'CadetBlue', 'AntiqueWhite',
+    'Chocolate', 'Coral', 'CornflowerBlue', 'Cornsilk', 'Crimson', 'Cyan',
+    'DarkCyan', 'DarkGoldenRod', 'DarkGrey', 'DarkKhaki', 'DarkOrange',
+    'DarkOrchid', 'DarkSalmon', 'DarkSeaGreen', 'DarkTurquoise', 'DarkViolet',
+    'DeepPink', 'DeepSkyBlue', 'DodgerBlue', 'FireBrick', 'FloralWhite',
+    'ForestGreen', 'Fuchsia', 'Gainsboro', 'GhostWhite', 'Gold', 'GoldenRod',
+    'Salmon', 'Tan', 'HoneyDew', 'HotPink', 'IndianRed', 'Ivory', 'Khaki',
+    'Lavender', 'LavenderBlush', 'LawnGreen', 'LemonChiffon', 'LightBlue',
+    'LightCoral', 'LightCyan', 'LightGoldenRodYellow', 'LightGray', 'LightGrey',
+    'LightGreen', 'LightPink', 'LightSalmon', 'LightSeaGreen', 'LightSkyBlue',
+    'LightSlateGray', 'LightSlateGrey', 'LightSteelBlue', 'LightYellow', 'Lime',
+    'LimeGreen', 'Linen', 'Magenta', 'MediumAquaMarine', 'MediumOrchid',
+    'MediumPurple', 'MediumSeaGreen', 'MediumSlateBlue', 'MediumSpringGreen',
+    'MediumTurquoise', 'MediumVioletRed', 'MintCream', 'MistyRose', 'Moccasin',
+    'NavajoWhite', 'OldLace', 'Olive', 'OliveDrab', 'Orange', 'OrangeRed',
+    'Orchid', 'PaleGoldenRod', 'PaleGreen', 'PaleTurquoise', 'PaleVioletRed',
+    'PapayaWhip', 'PeachPuff', 'Peru', 'Pink', 'Plum', 'PowderBlue', 'Purple',
+    'Red', 'RosyBrown', 'RoyalBlue', 'SaddleBrown', 'Green', 'SandyBrown',
+    'SeaGreen', 'SeaShell', 'Sienna', 'Silver', 'SkyBlue', 'SlateBlue',
+    'SlateGray', 'SlateGrey', 'Snow', 'SpringGreen', 'SteelBlue', 'GreenYellow',
+    'Teal', 'Thistle', 'Tomato', 'Turquoise', 'Violet', 'Wheat', 'White',
+    'WhiteSmoke', 'Yellow', 'YellowGreen'
+]
 
-def draw_annotation(img, boxes, klass, polygons=None, is_crowd=None):
+NUM_COLORS = len(STANDARD_COLORS)
+
+try:
+  FONT = ImageFont.truetype('arial.ttf', 24)
+except IOError:
+  FONT = ImageFont.load_default()
+
+def _draw_single_box(i, image, xmin, ymin, xmax, ymax, display_str, font, color='black', thickness=4):
+  draw = ImageDraw.Draw(image)
+  (left, right, top, bottom) = (xmin, xmax, ymin, ymax)
+  draw.line([(left, top), (left, bottom), (right, bottom),
+             (right, top), (left, top)], width=thickness, fill=color)
+  text_bottom = bottom
+  # Reverse list and print from bottom to top.
+  text_width, text_height = font.getsize(display_str)
+  margin = np.ceil(0.05 * text_height)
+  draw.rectangle(
+      [(left, text_bottom - text_height - 2 * margin), (left + text_width,
+                                                        text_bottom)],
+      fill=color)
+  draw.text(
+      (left + margin, text_bottom - text_height - margin),
+      display_str,
+      fill='black',
+      font=font)
+
+  # if i==0:
+  #   width, height = image.size
+  #   print('fname', fname)
+  #   fname1 = fname.decode().split('/')[-1].replace('.jpg','')
+  #   text_width, text_height = font.getsize(fname1)
+  #   left = 0
+  #   text_bottom = height-1
+  #   margin = np.ceil(0.05 * text_height)
+  #   draw.text(
+  #       (left + margin, text_bottom - text_height - margin),
+  #       fname1,
+  #       fill='white',
+  #       font=font)
+
+  return image
+
+def draw_bounding_boxes(image, gt_boxes, im_info):
+  num_boxes = gt_boxes.shape[0]
+  gt_boxes_new = gt_boxes.copy()
+  gt_boxes_new[:,:4] = np.round(gt_boxes_new[:,:4].copy() / im_info[2])
+  disp_image = Image.fromarray(np.uint8(image[0]))
+
+  for i in range(num_boxes):
+    this_class = int(gt_boxes_new[i, 4])
+    this_score = gt_boxes_new[i, 5]
+    disp_image = _draw_single_box(i, disp_image,
+                                gt_boxes_new[i, 0],
+                                gt_boxes_new[i, 1],
+                                gt_boxes_new[i, 2],
+                                gt_boxes_new[i, 3],
+                                '{},{:.3f}'.format(cfg.DATA.CLASS_NAMES[int(this_class)],this_score),#'N%02d-C%02d' % (i, this_class),
+                                FONT,
+                                color=STANDARD_COLORS[this_class % NUM_COLORS])
+
+  image[0, :] = np.array(disp_image)
+  return image
+
+def draw_annotation(img, boxes, klass, is_crowd=None):
     """Will not modify img"""
     labels = []
     assert len(boxes) == len(klass)
@@ -27,11 +122,6 @@ def draw_annotation(img, boxes, klass, polygons=None, is_crowd=None):
         for cls in klass:
             labels.append(cfg.DATA.CLASS_NAMES[cls])
     img = viz.draw_boxes(img, boxes, labels)
-
-    if polygons is not None:
-        for p in polygons:
-            mask = polygons_to_mask(p, img.shape[0], img.shape[1])
-            img = draw_mask(img, mask)
     return img
 
 
@@ -76,48 +166,16 @@ def draw_final_outputs(img, results):
     if len(results) == 0:
         return img
 
-    # Display in largest to smallest order to reduce occlusion
-    boxes = np.asarray([r.box for r in results])
-    areas = np_area(boxes)
-    sorted_inds = np.argsort(-areas)
-
-    ret = img
     tags = []
-
-    for result_id in sorted_inds:
-        r = results[result_id]
-        if r.mask is not None:
-            ret = draw_mask(ret, r.mask)
-
     for r in results:
         tags.append(
             "{},{:.2f}".format(cfg.DATA.CLASS_NAMES[r.class_id], r.score))
-    ret = viz.draw_boxes(ret, boxes, tags)
-    return ret
-
-
-def draw_final_outputs_blackwhite(img, results):
-    """
-    Args:
-        results: [DetectionResult]
-    """
-    img_bw = img.mean(axis=2)
-    img_bw = np.stack([img_bw] * 3, axis=2)
-
-    if len(results) == 0:
-        return img_bw
-
     boxes = np.asarray([r.box for r in results])
+    ret = viz.draw_boxes(img, boxes, tags)
 
-    all_masks = [r.mask for r in results]
-    if all_masks[0] is not None:
-        m = all_masks[0] > 0
-        for m2 in all_masks[1:]:
-            m = m | (m2 > 0)
-        img_bw[m] = img[m]
-
-    tags = ["{},{:.2f}".format(cfg.DATA.CLASS_NAMES[r.class_id], r.score) for r in results]
-    ret = viz.draw_boxes(img_bw, boxes, tags)
+    for r in results:
+        if r.mask is not None:
+            ret = draw_mask(ret, r.mask)
     return ret
 
 
@@ -132,7 +190,6 @@ def draw_mask(im, mask, alpha=0.5, color=None):
     """
     if color is None:
         color = PALETTE_RGB[np.random.choice(len(PALETTE_RGB))][::-1]
-    color = np.asarray(color, dtype=np.float32)
     im = np.where(np.repeat((mask > 0)[:, :, None], 3, axis=2),
                   im * (1 - alpha) + color * alpha, im)
     im = im.astype('uint8')

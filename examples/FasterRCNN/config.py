@@ -88,16 +88,18 @@ _C = config     # short alias to avoid coding
 
 # mode flags ---------------------
 _C.TRAINER = 'replicated'  # options: 'horovod', 'replicated'
-_C.MODE_MASK = True        # Faster R-CNN or Mask R-CNN
-_C.MODE_FPN = True
+_C.MODE_MASK = False        # Faster R-CNN or Mask R-CNN
+_C.MODE_FPN = False
 
 # dataset -----------------------
 _C.DATA.BASEDIR = '/path/to/your/DATA/DIR'
 # All available dataset names are defined in `dataset/coco.py:register_coco`.
 # All TRAIN dataset will be concatenated for training.
-_C.DATA.TRAIN = ('coco_train2017',)   # i.e. trainval35k
+# _C.DATA.TRAIN = ('coco_train2017',)   # i.e. trainval35k
 # Each VAL dataset will be evaluated separately (instead of concatenated)
-_C.DATA.VAL = ('coco_val2017',)  # AKA minival2014
+# _C.DATA.VAL = ('coco_val2017',)  # AKA minival2014
+_C.DATA.TRAIN = ('voc_train2014',)
+_C.DATA.VAL = ('voc_val2014',)
 
 # These two configs will be populated later inside `finalize_configs`.
 _C.DATA.NUM_CATEGORY = -1  # without the background class (e.g., 80 for COCO)
@@ -138,10 +140,10 @@ _C.BACKBONE.STRIDE_1X1 = False  # True for MSRA models
 # schedule -----------------------
 _C.TRAIN.NUM_GPUS = None         # by default, will be set from code
 _C.TRAIN.WEIGHT_DECAY = 1e-4
-_C.TRAIN.BASE_LR = 1e-2  # defined for total batch size=8. Otherwise it will be adjusted automatically
+_C.TRAIN.BASE_LR = 1e-3  # defined for total batch size=8. Otherwise it will be adjusted automatically
 _C.TRAIN.WARMUP = 1000   # in terms of iterations. This is not affected by #GPUs
 _C.TRAIN.WARMUP_INIT_LR = 1e-2 * 0.33  # defined for total batch size=8. Otherwise it will be adjusted automatically
-_C.TRAIN.STEPS_PER_EPOCH = 500
+_C.TRAIN.STEPS_PER_EPOCH = 20
 _C.TRAIN.STARTING_EPOCH = 1  # the first epoch to start with, useful to continue a training
 
 # LR_SCHEDULE means equivalent steps when the total batch size is 8.
@@ -151,7 +153,7 @@ _C.TRAIN.STARTING_EPOCH = 1  # the first epoch to start with, useful to continue
 
 _C.TRAIN.LR_SCHEDULE = "1x"      # "1x" schedule in detectron
 _C.TRAIN.EVAL_PERIOD = 50  # period (epochs) to run evaluation
-_C.TRAIN.CHECKPOINT_PERIOD = 20  # period (epochs) to save model
+_C.TRAIN.CHECKPOINT_PERIOD = 200  # period (epochs) to save model
 
 # preprocessing --------------------
 # Alternative old (worse & faster) setting: 600

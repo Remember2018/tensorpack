@@ -23,6 +23,8 @@ from .model_frcnn import (
 from .model_mrcnn import maskrcnn_loss, maskrcnn_upXconv_head, unpackbits_masks
 from .model_rpn import generate_rpn_proposals, rpn_head, rpn_losses
 
+from viz import draw_annotation, draw_final_outputs, draw_predictions, draw_proposal_recall, draw_bounding_boxes
+
 
 class GeneralizedRCNN(ModelDesc):
     def preprocess(self, image):
@@ -35,10 +37,10 @@ class GeneralizedRCNN(ModelDesc):
         tf.summary.scalar('learning_rate-summary', lr)
 
         # The learning rate in the config is set for 8 GPUs, and we use trainers with average=False.
-        lr = lr / 8.
+        # lr = lr / 8.
         opt = tf.train.MomentumOptimizer(lr, 0.9)
-        if cfg.TRAIN.NUM_GPUS < 8:
-            opt = optimizer.AccumGradOptimizer(opt, 8 // cfg.TRAIN.NUM_GPUS)
+        # if cfg.TRAIN.NUM_GPUS < 8:
+        #     opt = optimizer.AccumGradOptimizer(opt, 8 // cfg.TRAIN.NUM_GPUS)
         return opt
 
     def get_inference_tensor_names(self):
@@ -64,14 +66,17 @@ class GeneralizedRCNN(ModelDesc):
 
         image = self.preprocess(inputs['image'])     # 1CHW
 
+        targets = [inputs[k] for k in ['gt_boxes', 'gt_labels', 'gt_masks'] if k in inputs]
+
         features = self.backbone(image)
         anchor_inputs = {k: v for k, v in inputs.items() if k.startswith('anchor_')}
-        proposals, rpn_losses = self.rpn(image, features, anchor_inputs)  # inputs?
+        proposals, rpn_losses = self.rpn(image, features, anchor_inputs, targets)  # inputs?
 
-        targets = [inputs[k] for k in ['gt_boxes', 'gt_labels', 'gt_masks'] if k in inputs]
-        gt_boxes_area = tf.reduce_mean(tf_area(inputs["gt_boxes"]), name='mean_gt_box_area')
-        add_moving_summary(gt_boxes_area)
-        head_losses = self.roi_heads(image, features, proposals, targets)
+        # targets = [inputs[k] for k in ['gt_boxes', 'gt_labels', 'gt_masks'] if k in inputs]
+        # gt_boxes_area = tf.reduce_mean(tf_area(inputs["gt_boxes"]), name='mean_gt_box_area')
+        # add_moving_summary(gt_boxes_area)
+        # head_losses = self.roi_heads(image, features, proposals, targets)
+        head_losses = [tf.constant(0. )]
 
         if self.training:
             wd_cost = regularize_cost(
@@ -92,7 +97,7 @@ class GeneralizedRCNN(ModelDesc):
                 except KeyError:
                     raise KeyError("Your model does not define the tensor '{}' in inference context.".format(name))
 
-
+import numpy as np
 class ResNetC4Model(GeneralizedRCNN):
     def inputs(self):
         ret = [
@@ -110,7 +115,7 @@ class ResNetC4Model(GeneralizedRCNN):
     def backbone(self, image):
         return [resnet_c4_backbone(image, cfg.BACKBONE.RESNET_NUM_BLOCKS[:3])]
 
-    def rpn(self, image, features, inputs):
+    def rpn(self, image, features, inputs, targets):
         featuremap = features[0]
         rpn_label_logits, rpn_box_logits = rpn_head('rpn', featuremap, cfg.RPN.HEAD_DIM, cfg.RPN.NUM_ANCHOR)
         anchors = RPNAnchors(
@@ -129,7 +134,59 @@ class ResNetC4Model(GeneralizedRCNN):
             cfg.RPN.TRAIN_PRE_NMS_TOPK if self.training else cfg.RPN.TEST_PRE_NMS_TOPK,
             cfg.RPN.TRAIN_POST_NMS_TOPK if self.training else cfg.RPN.TEST_POST_NMS_TOPK)
 
+
         if self.training:
+            gt_boxes, gt_labels, *_ = targets
+            im_info = [0, 0, 1.0]
+            image_show = tf.transpose(image,[0,2,3,1]) # + cfg.PREPROC.PIXEL_MEAN
+            # image_show = tf.identity(image)  # + cfg.PREPROC.PIXEL_MEAN
+            image_mean = tf.constant(cfg.PREPROC.PIXEL_MEAN, dtype=tf.float32)
+            image_invstd = tf.constant(1.0 / np.asarray(cfg.PREPROC.PIXEL_STD), dtype=tf.float32)
+            image_show /= image_invstd
+            image_show = image_show + image_mean
+            image_show = tf.clip_by_value(image_show, 0, 255)
+            image_show_gt = tf.py_func(draw_bounding_boxes,
+                                       [image_show, tf.concat([gt_boxes,
+                                                               tf.expand_dims(tf.cast(gt_labels, tf.float32), axis=1),
+                                                               tf.expand_dims(tf.ones_like(gt_labels, tf.float32),
+                                                                              axis=1)],
+                                                              axis=1), im_info],
+                                       tf.float32, name="gt_boxes")
+            tf.summary.image('GT', image_show_gt)
+            final_labels = tf.ones((tf.shape(proposal_boxes)[0],), dtype=tf.int64)
+            final_scores = tf.ones((tf.shape(proposal_boxes)[0],), dtype=tf.float32)
+            image_show_pred = tf.py_func(draw_bounding_boxes,
+                                         [image_show, tf.concat([proposal_boxes,
+                                                                 tf.expand_dims(tf.cast(final_labels, tf.float32),
+                                                                                axis=1),
+                                                                 tf.expand_dims(tf.cast(final_scores, tf.float32),
+                                                                                axis=1)],
+                                                                axis=1), im_info],
+                                         tf.float32, name="proposal_boxes")
+            tf.summary.image('PROPOSALS', image_show_pred)
+            ###############################################################
+
+            proposals = sample_fast_rcnn_targets(proposal_boxes, gt_boxes, gt_labels)
+            proposal_boxes = proposals.fg_boxes()
+            proposal_labels = proposals.fg_labels()
+            proposal_scores = tf.ones((tf.shape(proposal_boxes)[0],), dtype=tf.float32)
+            image_show2 = tf.transpose(image, [0, 2, 3, 1])  # + cfg.PREPROC.PIXEL_MEAN
+            # image_show = tf.identity(image)  # + cfg.PREPROC.PIXEL_MEAN
+            image_mean = tf.constant(cfg.PREPROC.PIXEL_MEAN, dtype=tf.float32)
+            image_invstd = tf.constant(1.0 / np.asarray(cfg.PREPROC.PIXEL_STD), dtype=tf.float32)
+            image_show2 /= image_invstd
+            image_show2 = image_show2 + image_mean
+            image_show2 = tf.clip_by_value(image_show2, 0, 255)
+            image_show_pred = tf.py_func(draw_bounding_boxes,
+                                         [image_show2, tf.concat([proposal_boxes,
+                                                                 tf.expand_dims(tf.cast(proposal_labels, tf.float32),
+                                                                                axis=1),
+                                                                 tf.expand_dims(tf.cast(proposal_scores, tf.float32),
+                                                                                axis=1)],
+                                                                axis=1), im_info],
+                                         tf.float32, name="roi_boxes")
+            tf.summary.image('ROIS', image_show_pred)
+
             losses = rpn_losses(
                 anchors.gt_labels, anchors.encoded_gt_boxes(), rpn_label_logits, rpn_box_logits)
         else:
