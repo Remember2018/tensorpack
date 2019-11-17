@@ -92,7 +92,7 @@ _C.MODE_MASK = False        # Faster R-CNN or Mask R-CNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '/path/to/your/DATA/DIR'
+_C.DATA.BASEDIR = '/content/voc2012/VOC2012/'
 # All available dataset names are defined in `dataset/coco.py:register_coco`.
 # All TRAIN dataset will be concatenated for training.
 # _C.DATA.TRAIN = ('coco_train2017',)   # i.e. trainval35k
@@ -114,7 +114,7 @@ _C.DATA.ABSOLUTE_COORD = True
 _C.DATA.NUM_WORKERS = 10
 
 # backbone ----------------------
-_C.BACKBONE.WEIGHTS = ''
+_C.BACKBONE.WEIGHTS = '/content/ImageNet-R50-AlignPadding.npz'
 # To train from scratch, set it to empty, and set FREEZE_AT to 0
 # To train from ImageNet pre-trained models, use the one that matches your
 #   architecture from http://models.tensorpack.com under the 'FasterRCNN' section.
