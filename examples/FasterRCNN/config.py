@@ -92,14 +92,12 @@ _C.MODE_MASK = False        # Faster R-CNN or Mask R-CNN
 _C.MODE_FPN = False
 
 # dataset -----------------------
-_C.DATA.BASEDIR = '/content/voc2012/VOC2012/'
+_C.DATA.BASEDIR = '/content/'
 # All available dataset names are defined in `dataset/coco.py:register_coco`.
 # All TRAIN dataset will be concatenated for training.
-# _C.DATA.TRAIN = ('coco_train2017',)   # i.e. trainval35k
+_C.DATA.TRAIN = ('coco_train2017',)   # i.e. trainval35k
 # Each VAL dataset will be evaluated separately (instead of concatenated)
-# _C.DATA.VAL = ('coco_val2017',)  # AKA minival2014
-_C.DATA.TRAIN = ('voc_train2014',)
-_C.DATA.VAL = ('voc_val2014',)
+_C.DATA.VAL = ('coco_val2017',)  # AKA minival2014　
 
 # These two configs will be populated later inside `finalize_configs`.
 _C.DATA.NUM_CATEGORY = -1  # without the background class (e.g., 80 for COCO)
@@ -143,7 +141,7 @@ _C.TRAIN.WEIGHT_DECAY = 1e-4
 _C.TRAIN.BASE_LR = 1e-3  # defined for total batch size=8. Otherwise it will be adjusted automatically
 _C.TRAIN.WARMUP = 1000   # in terms of iterations. This is not affected by #GPUs
 _C.TRAIN.WARMUP_INIT_LR = 1e-2 * 0.33  # defined for total batch size=8. Otherwise it will be adjusted automatically
-_C.TRAIN.STEPS_PER_EPOCH = 20
+_C.TRAIN.STEPS_PER_EPOCH = 1
 _C.TRAIN.STARTING_EPOCH = 1  # the first epoch to start with, useful to continue a training
 
 # LR_SCHEDULE means equivalent steps when the total batch size is 8.
